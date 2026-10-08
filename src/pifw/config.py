@@ -8,6 +8,26 @@ import yaml
 from pydantic import BaseModel, Field
 
 
+def load_env_file(path: str | Path = ".env") -> None:
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key = key.strip()
+        val = val.strip().strip("'\"")
+        if key and val and key not in os.environ:
+            os.environ[key] = val
+
+
+load_env_file()
+
+
+
+
 class FirewallConfig(BaseModel):
     enabled_layers: list[str] = Field(default_factory=lambda: ["L1", "L2", "L3", "structural", "session", "egress", "canary", "tool_guard"])
     allow_user_input: bool = True

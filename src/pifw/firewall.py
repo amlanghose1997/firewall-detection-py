@@ -158,60 +158,73 @@ class Firewall:
                     )
                 )
 
-        logger.info("[L1 Rules] Completed. Findings count: %d, Risk Score: %.2f", len(findings), risk_score)
+        logger.info("[L1 Rules] Completed. Findings count: %d, Pre-L2 Risk Score: %.2f", len(findings), risk_score)
 
-        # L2 ML Classifier: Always run if L2 is enabled
-        if "L2" in self.config.enabled_layers:
-            l2_res = self.classifier.predict(text)
-            logger.info(
-                "[L2 Classifier] Executed (Model: %s) -> Risk Score: %.2f, Ambiguous: %s",
-                self.classifier.model_name,
-                l2_res.score,
-                l2_res.is_ambiguous,
-            )
-            findings.append(
-                Finding(
-                    attack_type=AttackType.INSTRUCTION_OVERRIDE,
-                    score=l2_res.score,
-                    detector=f"classifier ({self.classifier.model_name})",
-                    layer="L2",
-                    reason=f"L2 ML Classifier score: {l2_res.score:.2f} (ambiguous: {l2_res.is_ambiguous})",
-                    evidence=text[:200],
-                )
-            )
-            risk_score = max(risk_score, l2_res.score)
+        # STEP 1: L1 Detection - If low ambiguity high risk (>= 0.85), block immediately
+        l1_low_ambiguity_block = (risk_score >= 0.85)
 
-        # L3 LLM Judge: Always run if L3 is enabled
-        if "L3" in self.config.enabled_layers:
-            logger.info(
-                "[L3 LLM Judge] Executing Judge -> Provider: %s, Model: %s",
-                self.judge.provider,
-                self.judge.model,
-            )
-            judge_result = self.judge.judge(text)
-            logger.info(
-                "[L3 LLM Judge] Result -> Injection Detected: %s, Confidence: %.2f, Reason: %s",
-                judge_result.is_injection,
-                judge_result.confidence,
-                judge_result.reason,
-            )
-            matched_type = (
-                AttackType(judge_result.attack_types[0])
-                if judge_result.attack_types and judge_result.attack_types[0] in [at.value for at in AttackType]
-                else AttackType.INDIRECT_INJECTION
-            )
-            findings.append(
-                Finding(
-                    attack_type=matched_type,
-                    score=judge_result.confidence if judge_result.is_injection else 0.0,
-                    detector=f"llm_judge ({self.judge.provider})",
-                    layer="L3",
-                    reason=judge_result.reason,
-                    evidence=judge_result.span_hint or text[:200],
+        if l1_low_ambiguity_block:
+            logger.info("[L1 Rules] Low ambiguity threat detected (Risk: %.2f >= 0.85). Returning BLOCK early.", risk_score)
+        else:
+            # STEP 2: L1 is safe or ambiguous -> Escalate to L2 ML Classifier (meta-llama/Prompt-Guard-86M)
+            if "L2" in self.config.enabled_layers:
+                l2_res = self.classifier.predict(text)
+                logger.info(
+                    "[L2 Classifier] Executed (Model: %s) -> Risk Score: %.2f, Ambiguous: %s",
+                    self.classifier.model_name,
+                    l2_res.score,
+                    l2_res.is_ambiguous,
                 )
-            )
-            if judge_result.is_injection:
-                risk_score = max(risk_score, judge_result.confidence)
+                findings.append(
+                    Finding(
+                        attack_type=AttackType.INSTRUCTION_OVERRIDE,
+                        score=l2_res.score,
+                        detector=f"classifier ({self.classifier.model_name})",
+                        layer="L2",
+                        reason=f"L2 ML Classifier score: {l2_res.score:.2f} (ambiguous: {l2_res.is_ambiguous})",
+                        evidence=text[:200],
+                    )
+                )
+                risk_score = max(risk_score, l2_res.score)
+
+                # Check if L2 detected a definitive high-confidence threat (not ambiguous, score >= 0.75)
+                l2_definitive_block = (l2_res.score >= 0.75 and not l2_res.is_ambiguous)
+
+                if l2_definitive_block:
+                    logger.info("[L2 Classifier] High-confidence ML threat detected (Score: %.2f). Returning BLOCK early.", l2_res.score)
+                else:
+                    # STEP 3: L2 is ambiguous or uncertain -> Escalate to L3 LLM Judge
+                    if "L3" in self.config.enabled_layers:
+                        logger.info(
+                            "[L3 LLM Judge] Escalating for semantic examination -> Provider: %s, Model: %s",
+                            self.judge.provider,
+                            self.judge.model,
+                        )
+                        judge_result = self.judge.judge(text)
+                        logger.info(
+                            "[L3 LLM Judge] Result -> Injection Detected: %s, Confidence: %.2f, Reason: %s",
+                            judge_result.is_injection,
+                            judge_result.confidence,
+                            judge_result.reason,
+                        )
+                        matched_type = (
+                            AttackType(judge_result.attack_types[0])
+                            if judge_result.attack_types and judge_result.attack_types[0] in [at.value for at in AttackType]
+                            else AttackType.INDIRECT_INJECTION
+                        )
+                        findings.append(
+                            Finding(
+                                attack_type=matched_type,
+                                score=judge_result.confidence if judge_result.is_injection else 0.0,
+                                detector=f"llm_judge ({self.judge.provider})",
+                                layer="L3",
+                                reason=judge_result.reason,
+                                evidence=judge_result.span_hint or text[:200],
+                            )
+                        )
+                        if judge_result.is_injection:
+                            risk_score = max(risk_score, judge_result.confidence)
+
 
 
         action = map_risk_to_action(risk_score, source_enum, config=self.config)
