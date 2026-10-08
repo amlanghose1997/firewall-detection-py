@@ -1,0 +1,13 @@
+patterns:
+  - id: cp_memory_write
+    regex: '(?:store|save|record|add|remember)\s+(?:this|it)\s+(?:as|to)\s+(?:a\s+)?(?:fact|note|memory|knowledge\s+base)?'
+    weight: 0.85
+    description: "context or memory poisoning attempt"
+  - id: cp_user_preference
+    regex: 'user's?\s+(?:real|true|actual)\s+preference'
+    weight: 0.82
+    description: "fake user preference injection"
+  - id: cp_fake_role_marker
+    regex: '(?:assistant|system|developer):\s*.*?(?:ignore|override|must|proceed)'
+    weight: 0.88
+    description: "fake role turn injection in data"

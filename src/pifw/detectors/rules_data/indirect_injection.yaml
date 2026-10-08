@@ -1,0 +1,9 @@
+patterns:
+  - id: ii_ai_addressed_imperative
+    regex: '(?:assistant|ai|llm|model)\s*(?:please|must|should|will)\s+(?:ignore|override|follow|execute)'
+    weight: 0.85
+    description: "imperative command addressed to AI in untrusted data"
+  - id: ii_instruction_in_doc
+    regex: 'this\s+document\s+contains\s+instructions\s+for\s+(?:the\s+)?(?:assistant|ai|model|llm)'
+    weight: 0.88
+    description: "document claiming authority over AI behavior"

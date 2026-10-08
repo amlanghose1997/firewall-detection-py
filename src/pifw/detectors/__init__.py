@@ -1,0 +1,1 @@
+from pifw.detectors.rules import RulesDetector as RulesDetector

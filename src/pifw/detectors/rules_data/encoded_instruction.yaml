@@ -1,0 +1,13 @@
+patterns:
+  - id: ei_base64_block
+    regex: '(?:[A-Za-z0-9+/]{24,}={0,2})'
+    weight: 0.82
+    description: "encoded base64 payload block"
+  - id: ei_unicode_escapes
+    regex: '(?:\\u[0-9A-Fa-f]{4}){3,}|(?:\\x[0-9A-Fa-f]{2}){4,}'
+    weight: 0.85
+    description: "unicode or hex escape sequence block"
+  - id: ei_percent_encoded
+    regex: '(?:%[0-9A-Fa-f]{2}){4,}'
+    weight: 0.80
+    description: "consecutive url percent encoding block"

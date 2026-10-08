@@ -1,0 +1,29 @@
+patterns:
+  - id: rc_you_are_now
+    regex: 'you\s+are\s+now\b|act\s+as\s+if\s+you\s+are|pretend\s+to\s+be'
+    weight: 0.85
+    description: "persona override role change"
+  - id: rc_dan_mode
+    regex: '\bdan\s+mode\b|\bdan\b|do\s+anything\s+now'
+    weight: 0.90
+    description: "DAN jailbreak persona"
+  - id: rc_developer_mode
+    regex: 'developer\s+mode'
+    weight: 0.88
+    description: "developer mode jailbreak"
+  - id: rc_god_mode
+    regex: 'god\s+mode'
+    weight: 0.88
+    description: "god mode jailbreak"
+  - id: rc_jailbroken
+    regex: '\bjailbreak(?:ed)?\b|\bunbound\b'
+    weight: 0.85
+    description: "jailbreak keyword trigger"
+  - id: rc_rogue_admin
+    regex: 'rogue\s+admin|system\s+administrator'
+    weight: 0.85
+    description: "unauthorized role adoption"
+  - id: rc_hypothetical_wrapper
+    regex: 'hypothetically\s*,'
+    weight: 0.75
+    description: "hypothetical bypass framing"

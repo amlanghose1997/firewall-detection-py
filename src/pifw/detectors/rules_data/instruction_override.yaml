@@ -1,0 +1,49 @@
+patterns:
+  - id: io_ignore_prev
+    regex: 'ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?'
+    weight: 0.85
+    description: "ignore previous instructions"
+  - id: io_disregard
+    regex: 'disregard\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?'
+    weight: 0.85
+    description: "disregard previous instructions"
+  - id: io_forget
+    regex: 'forget\s+(?:all\s+)?(?:previous|prior|above|your)\s+(?:instructions?|rules?|guidelines?)'
+    weight: 0.85
+    description: "forget instructions"
+  - id: io_new_instructions
+    regex: 'new\s+instructions?\s*:'
+    weight: 0.80
+    description: "new instructions directive"
+  - id: io_from_now_on
+    regex: 'from\s+now\s+on[,:]?\s+(?:you|ignore|forget|disregard|act|pretend|do\s+not)'
+    weight: 0.80
+    description: "from now on + directive"
+  - id: io_stop_being
+    regex: 'stop\s+being\s+(?:a\s+)?(?:helpful|safe|responsible|ethical)'
+    weight: 0.82
+    description: "stop being safe"
+  - id: io_system_markers
+    regex: '\[INST\]|<\|im_start\|>|<\|im_end\|>|###\s*(?:SYSTEM|USER|ASSISTANT)|</?system>|<\|system\|>'
+    weight: 0.90
+    description: "LLM prompt template markers"
+  - id: io_override_system
+    regex: 'override\s+(?:the\s+)?(?:system\s+prompt|instructions?|safety|guidelines?|rules?)'
+    weight: 0.85
+    description: "override system prompt"
+  - id: io_es_ignora
+    regex: 'ignora\s+(?:las?\s+)?instrucciones?\s+(?:anteriores?|previas?)'
+    weight: 0.82
+    description: "Spanish: ignore previous instructions"
+  - id: io_fr_ignore
+    regex: 'ignore[rz]?\s+(?:les?\s+)?instructions?\s+(?:précédentes?|antérieures?)'
+    weight: 0.82
+    description: "French: ignore previous instructions"
+  - id: io_de_ignoriere
+    regex: 'ignorier(?:e|en)\s+(?:die\s+)?(?:vorherigen?\s+)?Anweisungen'
+    weight: 0.82
+    description: "German: ignore previous instructions"
+  - id: io_hi_transliterated
+    regex: 'pichle\s+(?:nirdesh|hukm)\s+(?:bhool\s+ja|ignore\s+kar)'
+    weight: 0.78
+    description: "Hindi transliterated: forget previous instructions"

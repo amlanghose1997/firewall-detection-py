@@ -1,0 +1,31 @@
+# pifw — Prompt Injection Firewall Configuration
+# Copy to firewall.yaml or load with FirewallConfig.load("firewall.yaml")
+
+enabled_layers:
+  - L1
+  - L2
+  - L3
+  - structural
+  - session
+  - egress
+  - canary
+  - tool_guard
+
+allow_user_input: true
+log_content: false
+fail_mode: "warn"
+
+max_decoding_depth: 3
+max_decoded_length: 2000
+
+threshold_allow: 0.30
+threshold_sanitize: 0.55
+threshold_quarantine: 0.75
+threshold_block: 0.85
+
+untrusted_boost: 0.15
+hidden_boost: 0.20
+obfuscation_boost: 0.25
+
+session_id: "default"
+max_findings: 8

@@ -1,0 +1,9 @@
+patterns:
+  - id: ms_remember_for_later
+    regex: 'remember\s+this\s+for\s+later|when\s+i\s+say|hypothetically\s*,'
+    weight: 0.80
+    description: "multi-step staged payload setup"
+  - id: ms_next_message_trigger
+    regex: 'in\s+the\s+next\s+message|on\s+the\s+next\s+turn|do\s+this\s+later|execute\s+step'
+    weight: 0.78
+    description: "split turn trigger reference"
