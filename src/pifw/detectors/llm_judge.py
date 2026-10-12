@@ -1,10 +1,15 @@
-from __future__ import annotations
-
 import json
+import logging
 import os
 import secrets
 from typing import Any
 from pydantic import BaseModel, ValidationError
+
+from pifw.config import load_env_file
+
+load_env_file()
+
+logger = logging.getLogger("pifw.llm_judge")
 
 
 class JudgeResult(BaseModel):
@@ -13,6 +18,8 @@ class JudgeResult(BaseModel):
     confidence: float
     span_hint: str
     reason: str
+    provider_used: str = "generic"
+    raw_response: str = ""
 
 
 class LLMJudge:
@@ -23,13 +30,20 @@ class LLMJudge:
         *,
         provider: str | None = None,
         model: str | None = None,
-        timeout: float = 5.0,
+        timeout: float = 45.0,
         client: Any | None = None,
     ) -> None:
         self.provider = (provider or os.getenv("PIFW_JUDGE_PROVIDER") or self._auto_detect_provider()).lower()
         self.model = model or os.getenv("PIFW_JUDGE_MODEL") or self._default_model_for_provider(self.provider)
-        self.timeout = timeout
+        self.timeout = float(os.getenv("PIFW_JUDGE_TIMEOUT", str(timeout)))
         self.client = client or self._init_client()
+        logger.info(
+            "🛡️ [L3 LLM Judge Active] Provider: %s | Model: %s | Timeout: %.1fs | Client Ready: %s",
+            self.provider,
+            self.model,
+            self.timeout,
+            bool(self.client),
+        )
 
     @staticmethod
     def _auto_detect_provider() -> str:
@@ -46,7 +60,7 @@ class LLMJudge:
     @staticmethod
     def _default_model_for_provider(provider: str) -> str:
         if provider == "gemini":
-            return "gemini-1.5-flash"
+            return "gemini-3.8-flash"
         if provider == "anthropic":
             return "claude-3-haiku-20240307"
         return "gpt-4o-mini"
@@ -54,17 +68,35 @@ class LLMJudge:
     def _init_client(self) -> Any | None:
         if self.provider == "gemini":
             api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            masked_key = f"{api_key[:6]}...{api_key[-4:]}" if api_key and len(api_key) > 10 else ("None" if not api_key else "***")
+            logger.info(
+                "⚙️ [L3 Gemini Config] Provider: %s | Model: %s | Timeout: %.1fs | API Key Loaded: %s",
+                self.provider,
+                self.model,
+                self.timeout,
+                masked_key,
+            )
             if api_key:
                 try:
                     import google.generativeai as genai
                     genai.configure(api_key=api_key)
-                    return genai.GenerativeModel(self.model)
-                except ImportError:
+                    client = genai.GenerativeModel(self.model)
+                    logger.info("✅ [L3 Gemini Client] Successfully initialized GenerativeModel('%s')", self.model)
+                    return client
+                except Exception as exc:
+                    logger.warning("Failed to configure google.generativeai with default transport: %s", exc)
                     try:
-                        from google import genai
-                        return genai.Client(api_key=api_key)
-                    except ImportError:
+                        import google.generativeai as genai
+                        genai.configure(api_key=api_key, transport="rest")
+                        client = genai.GenerativeModel(self.model)
+                        logger.info("✅ [L3 Gemini Client] Initialized with rest transport: %s", self.model)
+                        return client
+                    except Exception as exc_rest:
+                        logger.error("❌ [L3 Gemini Client] Failed to initialize Gemini model: %s", exc_rest)
                         return None
+            else:
+                logger.warning("⚠️ [L3 Gemini Warning] No GEMINI_API_KEY or GOOGLE_API_KEY found in environment.")
+                return None
         elif self.provider == "openai":
             api_key = os.getenv("OPENAI_API_KEY")
             if api_key:
@@ -73,6 +105,7 @@ class LLMJudge:
                     return OpenAI(api_key=api_key)
                 except ImportError:
                     return None
+
         elif self.provider == "anthropic":
             api_key = os.getenv("ANTHROPIC_API_KEY")
             if api_key:
@@ -128,21 +161,28 @@ class LLMJudge:
 
 
         if self.client is None:
+            logger.warning("⚠️ [L3 LLM Warning] No API client initialized for provider: %s", self.provider)
             return ""
 
+        logger.info("📡 [L3 LLM Trigger] Calling %s API (model: %s)...", self.provider, self.model)
         try:
             # 1. Gemini Client
             if self.provider == "gemini":
                 if hasattr(self.client, "generate_content"):
                     full_prompt = f"{system_instruction}\n\n{user_prompt}"
-                    resp = self.client.generate_content(full_prompt)
-                    return resp.text if hasattr(resp, "text") else ""
+                    resp = self.client.generate_content(full_prompt, request_options={"timeout": float(self.timeout)})
+                    raw_text = resp.text if hasattr(resp, "text") else ""
+                    logger.info("📥 [L3 LLM Response] Gemini returned: %s", raw_text)
+                    return raw_text
                 elif hasattr(self.client, "models"):
                     resp = self.client.models.generate_content(
                         model=self.model,
-                        contents=f"{system_instruction}\n\n{user_prompt}"
+                        contents=f"{system_instruction}\n\n{user_prompt}",
                     )
-                    return resp.text if hasattr(resp, "text") else ""
+                    raw_text = resp.text if hasattr(resp, "text") else ""
+                    logger.info("📥 [L3 LLM Response] Gemini returned: %s", raw_text)
+                    return raw_text
+
 
             # 2. OpenAI Client
             elif hasattr(self.client, "chat") and hasattr(self.client.chat, "completions"):
@@ -155,7 +195,9 @@ class LLMJudge:
                     ],
                     timeout=self.timeout,
                 )
-                return str(response.choices[0].message.content)
+                raw_text = str(response.choices[0].message.content)
+                logger.info("📥 [L3 LLM Response] OpenAI returned: %s", raw_text)
+                return raw_text
 
             # 3. Anthropic Client
             elif hasattr(self.client, "messages"):
@@ -166,9 +208,12 @@ class LLMJudge:
                     max_tokens=300,
                 )
                 if hasattr(response, "content") and response.content:
-                    return str(response.content[0].text)
+                    raw_text = str(response.content[0].text)
+                    logger.info("📥 [L3 LLM Response] Anthropic returned: %s", raw_text)
+                    return raw_text
 
-        except Exception:
+        except Exception as exc:
+            logger.error("❌ [L3 LLM API Error] %s call failed: %s", self.provider, exc)
             return ""
 
         return ""
@@ -185,9 +230,14 @@ class LLMJudge:
                         clean_str = clean_str[4:]
                 clean_str = clean_str.strip()
                 payload = json.loads(clean_str)
-                return JudgeResult.model_validate(payload)
-            except (TypeError, ValueError, ValidationError):
-                pass
+                res = JudgeResult.model_validate(payload)
+                res.provider_used = f"{self.provider} ({self.model})"
+                res.raw_response = clean_str
+                return res
+            except (TypeError, ValueError, ValidationError) as parse_err:
+                logger.warning("Failed to parse LLM JSON response: %s", parse_err)
+        return self._fallback_result(text)
+
         return self._fallback_result(text)
 
 

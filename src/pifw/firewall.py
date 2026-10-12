@@ -175,16 +175,22 @@ class Firewall:
                     l2_res.score,
                     l2_res.is_ambiguous,
                 )
-                findings.append(
-                    Finding(
-                        attack_type=AttackType.INSTRUCTION_OVERRIDE,
-                        score=l2_res.score,
-                        detector=f"classifier ({self.classifier.model_name})",
-                        layer="L2",
-                        reason=f"L2 ML Classifier score: {l2_res.score:.2f} (ambiguous: {l2_res.is_ambiguous})",
-                        evidence=text[:200],
+                chunk.meta["l2_result"] = {
+                    "score": l2_res.score,
+                    "is_ambiguous": l2_res.is_ambiguous,
+                    "model": self.classifier.model_name,
+                }
+                if l2_res.score >= 0.35 or l2_res.is_ambiguous:
+                    findings.append(
+                        Finding(
+                            attack_type=AttackType.INSTRUCTION_OVERRIDE,
+                            score=l2_res.score,
+                            detector=f"classifier ({self.classifier.model_name})",
+                            layer="L2",
+                            reason=f"L2 ML Classifier score: {l2_res.score:.2f} (ambiguous: {l2_res.is_ambiguous})",
+                            evidence=text[:200],
+                        )
                     )
-                )
                 risk_score = max(risk_score, l2_res.score)
 
                 # Check if L2 detected a definitive high-confidence threat (not ambiguous, score >= 0.75)
@@ -207,23 +213,27 @@ class Firewall:
                             judge_result.confidence,
                             judge_result.reason,
                         )
-                        matched_type = (
-                            AttackType(judge_result.attack_types[0])
-                            if judge_result.attack_types and judge_result.attack_types[0] in [at.value for at in AttackType]
-                            else AttackType.INDIRECT_INJECTION
-                        )
-                        findings.append(
-                            Finding(
-                                attack_type=matched_type,
-                                score=judge_result.confidence if judge_result.is_injection else 0.0,
-                                detector=f"llm_judge ({self.judge.provider})",
-                                layer="L3",
-                                reason=judge_result.reason,
-                                evidence=judge_result.span_hint or text[:200],
-                            )
-                        )
                         if judge_result.is_injection:
                             risk_score = max(risk_score, judge_result.confidence)
+                            matched_type = (
+                                AttackType(judge_result.attack_types[0])
+                                if judge_result.attack_types and judge_result.attack_types[0] in [at.value for at in AttackType]
+                                else AttackType.INDIRECT_INJECTION
+                            )
+                            findings.append(
+                                Finding(
+                                    attack_type=matched_type,
+                                    score=judge_result.confidence,
+                                    detector=f"llm_judge ({self.judge.provider})",
+                                    layer="L3",
+                                    reason=judge_result.reason,
+                                    evidence=judge_result.span_hint or text[:200],
+                                )
+                            )
+                        if judge_result:
+                            chunk.meta["judge_result"] = judge_result.model_dump()
+
+
 
 
 

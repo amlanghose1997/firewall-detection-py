@@ -103,9 +103,8 @@ class Verdict(BaseModel):
 
         # 2. L2 Status
         l2_findings = layer_map.get("L2", [])
-        if not l2_findings:
-            lines.append("  [-] [L2 ML Classifier]: NOT EXECUTED")
-        else:
+        l2_meta = self.chunk.meta.get("l2_result") if self.chunk and hasattr(self.chunk, "meta") else None
+        if l2_findings:
             f = l2_findings[0]
             if f.score >= 0.60:
                 lines.append(f"  [THREAT] [L2 ML Classifier]: HIGH RISK DETECTED (Score: {f.score:.2f})")
@@ -115,12 +114,16 @@ class Verdict(BaseModel):
                 lines.append(f"  [CLEAN] [L2 ML Classifier]: CLEAN (Score: {f.score:.2f})")
             for f in l2_findings:
                 lines.append(f"     |-- [{f.detector}] {f.reason}")
+        elif l2_meta:
+            lines.append(f"  [CLEAN] [L2 ML Classifier]: CLEAN (Score: {l2_meta.get('score', 0.0):.2f})")
+            lines.append(f"     |-- [classifier ({l2_meta.get('model', 'ML')})] score: {l2_meta.get('score', 0.0):.2f} (ambiguous: {l2_meta.get('is_ambiguous', False)})")
+        else:
+            lines.append("  [-] [L2 ML Classifier]: NOT EXECUTED")
 
         # 3. L3 Status
         l3_findings = layer_map.get("L3", [])
-        if not l3_findings:
-            lines.append("  [-] [L3 LLM Judge]: NOT EXECUTED")
-        else:
+        judge_res = self.chunk.meta.get("judge_result") if self.chunk and hasattr(self.chunk, "meta") else None
+        if l3_findings:
             f = l3_findings[0]
             if f.score >= 0.50:
                 lines.append(f"  [THREAT] [L3 LLM Judge]: INJECTION CONFIRMED (Confidence: {f.score:.2f})")
@@ -128,6 +131,12 @@ class Verdict(BaseModel):
                 lines.append(f"  [CLEAN] [L3 LLM Judge]: CLEAN (Confidence: {f.score:.2f})")
             for f in l3_findings:
                 lines.append(f"     |-- [{f.detector}] {f.attack_type.value}: score={f.score:.2f} | {f.reason}")
+        elif judge_res:
+            provider = judge_res.get("provider_used") or "LLM Judge"
+            lines.append(f"  [CLEAN] [L3 LLM Judge]: VERIFIED SAFE BY LLM ({provider})")
+            lines.append(f"     |-- Reason: {judge_res.get('reason')}")
+        else:
+            lines.append("  [-] [L3 LLM Judge]: NOT EXECUTED")
 
         lines.append("==================================================================")
         return "\n".join(lines)
